@@ -1,38 +1,63 @@
-const express = require('express');
-const app = express();
+const http = require('http');
+const fs = require('fs');
+const url = require('url');
 
-app.use(express.static('public'));
+let invalidRequestCount = 0;
 
+const server = http.createServer((req, res) => {
+  const { pathname, query } = url.parse(req.url, true);
 
-app.use(express.urlencoded({ extended: true }));
+  if (pathname === '/signup') {
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        const { name, gender, age } = JSON.parse(body);
+        if (!name || !gender || !age) {
+          res.writeHead(400, { 'Content-Type': 'text/plain' });
+          res.end('Invalid input. Please provide name, gender, and age.');
+          return;
+        }
 
+        fs.readFile('users.txt', 'utf8', (err, data) => {
+          if (err && err.code !== 'ENOENT') {
+            console.error('Error reading file:', err);
+            res.writeHead(500, { 'Content-Type': 'text/plain' });
+            res.end('Internal Server Error');
+            return;
+          }
 
-
-
-app.get('/details', (req, res) => {
-  const id = req.query.id;
-
-
-
-  if (id ===' ') {
-    res.send('Specify the value');
-  }
-  else if (!id) {
-    res.send('Invalid Request');
-  } 
-   else {
-    res.send(`Request received with value ${id}`);
+          const users = err ? [] : JSON.parse(data);
+          users.push({ name, gender, age });
+          fs.writeFile('users.txt', JSON.stringify(users), (err) => {
+            if (err) {
+              console.error('Error writing file:', err);
+              res.writeHead(500, { 'Content-Type': 'text/plain' });
+              res.end('Internal Server Error');
+              return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/plain' });
+            res.end('User added successfully.');
+          });
+        });
+      });
+    } else if (req.method === 'GET') {
+      invalidRequestCount++;
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(`Invalid request method - ${invalidRequestCount}`);
+    } else {
+      res.writeHead(405, { 'Content-Type': 'text/plain' });
+      res.end('Method Not Allowed');
+    }
+  } else {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
   }
 });
 
-
-
-app.use((req, res, next) => {
-    res.status(404).sendFile('404.html', { root: __dirname + '/public' });
-  });
-
-
-const PORT = 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+server.listen(3000, () => {
+  console.log('Server started on port 3000');
 });
+
